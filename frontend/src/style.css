@@ -114,6 +114,14 @@ body {
 .bubble.pending { color: var(--muted); font-style: italic; }
 .bubble.error { border-color: #7f3a3a; color: #ffb4b4; }
 
+.error-bar {
+  margin: 12px 0;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #331a1a;
+  color: #f8d7da;
+}
+
 .chat-form {
   display: flex;
   gap: 10px;

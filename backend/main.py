@@ -94,6 +94,9 @@ def chat(body: ChatBody, request: Request):
     return {"reply": reply}
 
 
-# Serve the frontend last, so /api and /auth routes above take precedence.
+# Serve the built React frontend last, so /api and /auth routes above take precedence.
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
-app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+frontend_build_dir = os.path.join(frontend_dir, "dist")
+if not os.path.isdir(frontend_build_dir):
+    logger.warning("Frontend build directory not found. Run `npm run build` in frontend/ before using backend static serving.")
+app.mount("/", StaticFiles(directory=frontend_build_dir, html=True), name="frontend")

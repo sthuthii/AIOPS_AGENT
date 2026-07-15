@@ -18,8 +18,31 @@ run it locally.
      Client in Google Cloud Console → APIs & Services → Credentials, with
      authorized redirect URI `http://localhost:8000/auth/callback`.
    - `SESSION_SECRET` — any long random string.
-3. From `backend/`: `uvicorn main:app --reload --port 8000`
-4. Open `http://localhost:8000`, sign in with Google, pick a project, chat.
+3. In a separate terminal, install and run the React frontend for local development:
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+4. Open the Vite frontend at `http://localhost:3000` and sign in with Google.
+
+5. To let the backend serve the React app in production or local backend-only mode,
+   build the frontend first:
+
+   ```bash
+   cd frontend
+   npm run build
+   ```
+
+6. Then run the backend from `backend/`:
+
+   ```bash
+   uvicorn main:app --reload --host 0.0.0.0 --port 8000
+   ```
+
+7. Open `http://localhost:8000`, sign in with Google, pick a project, chat.
 
 The signed-in Google account needs the relevant IAM roles on the target
 project (e.g. Compute Viewer/Instance Admin, Kubernetes Engine Viewer, Cloud

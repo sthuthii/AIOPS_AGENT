@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AIOps Agent — Cloud Infrastructure Assistant</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="dot"></span>
+        <h1>AIOps Agent</h1>
+      </div>
+      <div id="auth-area"></div>
+    </header>
+
+    <main id="signed-out-view" class="hero">
+      <h2>Manage your GCP infrastructure in plain English</h2>
+      <p>Sign in with Google to connect your own project. Nothing is stored beyond your session.</p>
+      <button id="login-btn" class="btn primary">Sign in with Google</button>
+      <div class="examples">
+        <p class="examples-label">Try things like:</p>
+        <ul>
+          <li>"List all Compute Engine VM instances"</li>
+          <li>"Show CPU utilization for production VMs"</li>
+          <li>"List unhealthy Kubernetes clusters"</li>
+          <li>"Restart the VM named app-server-01"</li>
+          <li>"Show Cloud SQL instances with high CPU usage"</li>
+          <li>"Summarize any infrastructure alerts from the last 24 hours"</li>
+        </ul>
+      </div>
+    </main>
+
+    <main id="signed-in-view" class="workspace" style="display:none;">
+      <section class="project-bar">
+        <label for="project-select">Active project:</label>
+        <select id="project-select"><option>Loading projects…</option></select>
+        <button id="refresh-projects" class="btn ghost" title="Refresh project list">↻</button>
+      </section>
+
+      <section id="chat-log" class="chat-log"></section>
+
+      <form id="chat-form" class="chat-form">
+        <input id="chat-input" type="text" placeholder="Ask the agent to check or manage your infrastructure…" autocomplete="off" />
+        <button type="submit" class="btn primary">Send</button>
+      </form>
+    </main>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

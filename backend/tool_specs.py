@@ -1,4 +1,7 @@
-from .tool_loader import load_tools
+try:
+    from .tool_loader import load_tools
+except Exception:
+    from tool_loader import load_tools
 
 
 def load_tool_specs() -> list[dict]:

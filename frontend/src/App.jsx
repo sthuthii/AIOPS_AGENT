@@ -21,6 +21,7 @@ function App() {
   const [chatLog, setChatLog] = useState([]);
   const [message, setMessage] = useState('');
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [processingSteps, setProcessingSteps] = useState([]);
   const [error, setError] = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
   const [toolResults, setToolResults] = useState([]);
@@ -68,6 +69,10 @@ function App() {
     ]);
     setToolResults([]);
     setIncidentSummary(null);
+    setProcessingSteps([
+      'Sending prompt to the agent',
+      'Waiting for the agent to decide which tools to call',
+    ]);
 
     try {
       const data = await api('/api/chat', {
@@ -75,6 +80,10 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: trimmed }),
       });
+      setProcessingSteps([
+        'Received agent response',
+        'Formatting the final reply',
+      ]);
       setChatLog((log) =>
         log.map((item) =>
           item.kind === 'agent pending' && item.text === 'Thinking…'
@@ -93,6 +102,9 @@ function App() {
             : item
         )
       );
+      setError(`Agent request failed: ${err.message}`);
+    } finally {
+      setProcessingSteps([]);
     }
   };
 
@@ -120,6 +132,10 @@ function App() {
       { kind: 'user', text: confirm ? 'Yes' : 'Cancel' },
       { kind: 'agent pending', text: 'Thinking…' },
     ]);
+    setProcessingSteps([
+      'Confirming the requested action',
+      'Waiting for the agent to execute the operation',
+    ]);
 
     try {
       const data = await api('/api/confirm-action', {
@@ -142,7 +158,9 @@ function App() {
             : item
         )
       );
+      setError(`Action execution failed: ${err.message}`);
     } finally {
+      setProcessingSteps([]);
       setPendingAction(null);
     }
   };
@@ -282,6 +300,17 @@ function App() {
               </section>
             );
           })()}
+
+          {processingSteps.length > 0 && (
+            <section className="processing-window">
+              <div className="processing-header">Agent processing</div>
+              <ul>
+                {processingSteps.map((step, idx) => (
+                  <li key={idx}>{step}</li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {error && <div className="error-bar">{error}</div>}
 

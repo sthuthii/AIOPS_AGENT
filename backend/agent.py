@@ -164,6 +164,23 @@ def _summarize_tool_results(tool_results: list[dict]) -> str:
             if len(items) > 10:
                 lines.append(f"- ... and {len(items) - 10} more")
             summaries.append("\n".join(lines))
+        elif tool_name == "list_projects":
+            items = [item for item in result if isinstance(item, dict)]
+            errors = [item.get("error") for item in items if item.get("error")]
+            if errors:
+                summaries.append(f"Project lookup issue: {errors[0]}")
+                continue
+            if not items:
+                summaries.append("No accessible GCP projects were returned.")
+                continue
+            lines = ["Accessible GCP projects:"]
+            for item in items[:20]:
+                proj_name = item.get("name") or item.get("project_id") or "unknown"
+                proj_id = item.get("project_id", "unknown")
+                lines.append(f"- {proj_name} ({proj_id})")
+            if len(items) > 20:
+                lines.append(f"- ... and {len(items) - 20} more")
+            summaries.append("\n".join(lines))
         elif tool_name == "list_gke_clusters":
             items = [item for item in result if isinstance(item, dict)]
             if not items:

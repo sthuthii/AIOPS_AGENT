@@ -31,7 +31,7 @@ def list_instances(credentials, project_id: str) -> list[dict]:
                     )
         return results
     except GoogleAPIError as e:
-        return [{"error": str(e)}]
+        return [{"error": _normalize_compute_error(e, project_id)}]
 
 
 def find_instance_zone(credentials, project_id: str, instance_name: str) -> str | None:
@@ -39,6 +39,27 @@ def find_instance_zone(credentials, project_id: str, instance_name: str) -> str 
         if inst.get("name") == instance_name:
             return inst.get("zone")
     return None
+
+
+def _normalize_compute_error(error: GoogleAPIError, project_id: str | None = None) -> str:
+    message = str(error)
+    if (
+        "Compute Engine API has not been used" in message
+        or "Compute Engine API has been disabled" in message
+        or ("compute.googleapis.com" in message and "disabled" in message)
+    ):
+        target = f" for project {project_id}" if project_id else ""
+        return (
+            f"Compute Engine API is not enabled{target}. "
+            "Enable the Compute Engine API in the Google Cloud Console and retry."
+        )
+    return message
+
+
+def get_instance_status(credentials, project_id: str, instance_name: str, zone: str) -> str | None:
+    client = compute_v1.InstancesClient(credentials=credentials)
+    instance = client.get(project=project_id, zone=zone, instance=instance_name)
+    return getattr(instance, "status", None)
 
 
 @tool(
@@ -65,8 +86,37 @@ def restart_instance(credentials, project_id: str, instance_name: str, zone: str
                     "instance": instance_name,
                     "error": "Instance not found in this project.",
                 }
+
+        status = get_instance_status(credentials, project_id, instance_name, zone)
+        if not status:
+            return {
+                "status": "failed",
+                "instance": instance_name,
+                "zone": zone,
+                "error": "Unable to determine instance status before restart.",
+            }
+
         client = compute_v1.InstancesClient(credentials=credentials)
-        client.reset(project=project_id, zone=zone, instance=instance_name)
-        return {"status": "submitted", "instance": instance_name, "zone": zone}
+        if status == "RUNNING":
+            client.reset(project=project_id, zone=zone, instance=instance_name)
+            return {"status": "submitted", "instance": instance_name, "zone": zone, "action": "reset"}
+        if status in {"TERMINATED", "STOPPED", "STOPPING"}:
+            client.start(project=project_id, zone=zone, instance=instance_name)
+            return {"status": "submitted", "instance": instance_name, "zone": zone, "action": "start"}
+
+        return {
+            "status": "failed",
+            "instance": instance_name,
+            "zone": zone,
+            "error": (
+                f"Instance is not ready for restart. Current status: {status}. "
+                "Wait until the VM is RUNNING or TERMINATED/STOPPED and retry."
+            ),
+        }
     except GoogleAPIError as e:
-        return {"status": "failed", "instance": instance_name, "error": str(e)}
+        return {
+            "status": "failed",
+            "instance": instance_name,
+            "zone": zone,
+            "error": _normalize_compute_error(e, project_id),
+        }

@@ -181,6 +181,27 @@ body {
 .incident-summary-body li {
   margin-bottom: 6px;
 }
+.processing-window {
+  margin: 0 0 16px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(79, 140, 255, 0.08);
+  border: 1px solid rgba(79, 140, 255, 0.25);
+}
+.processing-header {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.processing-window ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #dbe5ff;
+}
+.processing-window li {
+  margin-bottom: 6px;
+}
 .chart-panel {
   margin: 16px 0;
   padding: 16px;

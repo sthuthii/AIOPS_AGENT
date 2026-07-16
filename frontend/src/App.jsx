@@ -228,118 +228,144 @@ function App() {
             </button>
           </section>
 
-          <section id="chat-log" className="chat-log">
-            {chatLog.map((entry, index) => (
-              <Bubble key={index} kind={entry.kind} text={entry.text} />
-            ))}
-          </section>
-
-          {incidentSummary && (
-            <section className="incident-summary-card">
-              <div className="incident-summary-header">
-                <h3>Incident Summary</h3>
-                <span>{incidentSummary.project_id}</span>
-              </div>
-              <div className="incident-summary-body">
+          <div className="layout-grid">
+            <section className="chat-panel">
+              <div className="chat-header">
                 <div>
-                  <h4>Resources</h4>
-                  <ul>
-                    {incidentSummary.resources?.length ? incidentSummary.resources.map((resource, index) => (
-                      <li key={`${resource.name}-${index}`}>
-                        <strong>{resource.name}</strong> — {resource.type} · {resource.status}
-                      </li>
-                    )) : <li>No resource data returned.</li>}
-                  </ul>
+                  <p className="chat-tag">Live agent chat</p>
+                  <h2>Ask your infrastructure copilot</h2>
                 </div>
-                <div>
-                  <h4>Alerts</h4>
-                  <ul>
-                    {incidentSummary.alerts?.length ? incidentSummary.alerts.map((alert, index) => (
-                      <li key={`${alert.message}-${index}`}>
-                        <strong>[{alert.severity}]</strong> {alert.message}
-                      </li>
-                    )) : <li>No recent alerts detected.</li>}
-                  </ul>
-                </div>
-                <div>
-                  <h4>Recommended next steps</h4>
-                  <ul>
-                    {incidentSummary.recommendations?.length ? incidentSummary.recommendations.map((recommendation, index) => (
-                      <li key={`${recommendation}-${index}`}>{recommendation}</li>
-                    )) : <li>Continue monitoring the environment.</li>}
-                  </ul>
+                <div className="chat-status">
+                  {processingSteps.length === 0 ? 'Ready for your next command' : 'Processing...'}
                 </div>
               </div>
-            </section>
-          )}
 
-          {(() => {
-            const cpuItems = toolResults
-              .filter((r) => r.tool === 'get_cpu_utilization' && Array.isArray(r.result))
-              .flatMap((r) => r.result || [])
-              .filter((item) => item && typeof item.utilization_percent === 'number');
+              {processingSteps.length > 0 && (
+                <section className="processing-window">
+                  <div className="processing-header">Agent processing</div>
+                  <ul>
+                    {processingSteps.map((step, idx) => (
+                      <li key={idx}>{step}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
-            if (cpuItems.length === 0) {
-              return null;
-            }
-
-            return (
-              <section className="chart-panel">
-                <h3>CPU Utilization</h3>
-                <div className="chart-grid">
-                  {cpuItems.map((item) => (
-                    <div key={item.resource || Math.random()} className="bar-row">
-                      <div className="bar-label">{item.resource || 'unknown resource'}</div>
-                      <div className="bar-wrap">
-                        <div className="bar" style={{ width: `${Math.min(item.utilization_percent, 100)}%` }} />
-                      </div>
-                      <div className="bar-value">{item.utilization_percent}%</div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            );
-          })()}
-
-          {processingSteps.length > 0 && (
-            <section className="processing-window">
-              <div className="processing-header">Agent processing</div>
-              <ul>
-                {processingSteps.map((step, idx) => (
-                  <li key={idx}>{step}</li>
+              <section id="chat-log" className="chat-log">
+                {chatLog.map((entry, index) => (
+                  <Bubble key={index} kind={entry.kind} text={entry.text} />
                 ))}
-              </ul>
+              </section>
+
+              {error && <div className="error-bar">{error}</div>}
+
+              {pendingAction && (
+                <div className="confirm-bar">
+                  <span>Confirm restart for <strong>{pendingAction.args.instance_name}</strong>?</span>
+                  <div className="confirm-actions">
+                    <button type="button" className="btn ghost" onClick={() => confirmPendingAction(false)}>
+                      Cancel
+                    </button>
+                    <button type="button" className="btn primary" onClick={() => confirmPendingAction(true)}>
+                      Yes, restart
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <form className="chat-form" onSubmit={sendMessage}>
+                <input
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  type="text"
+                  placeholder="Ask the agent to check or manage your infrastructure…"
+                  autoComplete="off"
+                />
+                <button type="submit" className="btn primary">
+                  Send
+                </button>
+              </form>
             </section>
-          )}
 
-          {error && <div className="error-bar">{error}</div>}
+            <aside className="sidebar">
+              <section className="sidebar-card">
+                <h3>Quick tips</h3>
+                <ul>
+                  <li>List VM instances in the project</li>
+                  <li>Show unhealthy GKE clusters</li>
+                  <li>Get CPU utilization for VMs</li>
+                  <li>Restart a VM after confirmation</li>
+                </ul>
+              </section>
 
-          {pendingAction && (
-            <div className="confirm-bar">
-              <span>Confirm restart for <strong>{pendingAction.args.instance_name}</strong>?</span>
-              <div className="confirm-actions">
-                <button type="button" className="btn ghost" onClick={() => confirmPendingAction(false)}>
-                  Cancel
-                </button>
-                <button type="button" className="btn primary" onClick={() => confirmPendingAction(true)}>
-                  Yes, restart
-                </button>
-              </div>
-            </div>
-          )}
+              {incidentSummary && (
+                <section className="incident-summary-card">
+                  <div className="incident-summary-header">
+                    <h3>Incident Summary</h3>
+                    <span>{incidentSummary.project_id}</span>
+                  </div>
+                  <div className="incident-summary-body">
+                    <div>
+                      <h4>Resources</h4>
+                      <ul>
+                        {incidentSummary.resources?.length ? incidentSummary.resources.map((resource, index) => (
+                          <li key={`${resource.name}-${index}`}>
+                            <strong>{resource.name}</strong> — {resource.type} · {resource.status}
+                          </li>
+                        )) : <li>No resource data returned.</li>}
+                      </ul>
+                    </div>
+                    <div>
+                      <h4>Alerts</h4>
+                      <ul>
+                        {incidentSummary.alerts?.length ? incidentSummary.alerts.map((alert, index) => (
+                          <li key={`${alert.message}-${index}`}>
+                            <strong>[{alert.severity}]</strong> {alert.message}
+                          </li>
+                        )) : <li>No recent alerts detected.</li>}
+                      </ul>
+                    </div>
+                    <div>
+                      <h4>Recommended next steps</h4>
+                      <ul>
+                        {incidentSummary.recommendations?.length ? incidentSummary.recommendations.map((recommendation, index) => (
+                          <li key={`${recommendation}-${index}`}>{recommendation}</li>
+                        )) : <li>Continue monitoring the environment.</li>}
+                      </ul>
+                    </div>
+                  </div>
+                </section>
+              )}
 
-          <form className="chat-form" onSubmit={sendMessage}>
-            <input
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              type="text"
-              placeholder="Ask the agent to check or manage your infrastructure…"
-              autoComplete="off"
-            />
-            <button type="submit" className="btn primary">
-              Send
-            </button>
-          </form>
+              {(() => {
+                const cpuItems = toolResults
+                  .filter((r) => r.tool === 'get_cpu_utilization' && Array.isArray(r.result))
+                  .flatMap((r) => r.result || [])
+                  .filter((item) => item && typeof item.utilization_percent === 'number');
+
+                if (cpuItems.length === 0) {
+                  return null;
+                }
+
+                return (
+                  <section className="chart-panel">
+                    <h3>CPU Utilization</h3>
+                    <div className="chart-grid">
+                      {cpuItems.map((item) => (
+                        <div key={item.resource || Math.random()} className="bar-row">
+                          <div className="bar-label">{item.resource || 'unknown resource'}</div>
+                          <div className="bar-wrap">
+                            <div className="bar" style={{ width: `${Math.min(item.utilization_percent, 100)}%` }} />
+                          </div>
+                          <div className="bar-value">{item.utilization_percent}%</div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })()}
+            </aside>
+          </div>
         </main>
       )}
     </div>

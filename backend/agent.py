@@ -119,9 +119,35 @@ def _dispatch(tool_name: str, tool_input: dict, credentials, project_id: str):
 MAX_TOOL_ITERATIONS = 6
 
 
-def handle_message(user_message: str, credentials, project_id: str) -> str:
+import json
+
+
+def _format_action_result(result: object) -> str:
+    if isinstance(result, dict):
+        if result.get("status") == "submitted":
+            instance = result.get("instance", "unknown instance")
+            zone = result.get("zone", "unknown zone")
+            return f"Restart submitted for {instance} in {zone}."
+        if result.get("status") == "failed":
+            instance = result.get("instance", "unknown instance")
+            error = result.get("error", "unknown error")
+            return f"Restart failed for {instance}: {error}"
+        return json.dumps(result, indent=2)
+    return str(result)
+
+
+def execute_pending_action(pending_action: dict, credentials, project_id: str) -> str:
+    tool_name = pending_action.get("tool")
+    args = pending_action.get("args", {})
+    if not tool_name:
+        return "No pending action found."
+    result = _dispatch(tool_name, args, credentials, project_id)
+    return _format_action_result(result)
+
+
+def handle_message(user_message: str, credentials, project_id: str) -> dict:
     if not project_id:
-        return "No GCP project selected yet -- please pick a project first."
+        return {"reply": "No GCP project selected yet -- please pick a project first."}
 
     contents = [
         types.Content(
@@ -135,6 +161,7 @@ def handle_message(user_message: str, credentials, project_id: str) -> str:
     # transient errors, NOT_FOUND, and quota (429) responses.
     logger = __import__("logging").getLogger("aiops-agent")
 
+    tool_results = []
     for _ in range(MAX_TOOL_ITERATIONS):
         fallbacks = [settings.GEMINI_MODEL, "gemini-2.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"]
         # Deduplicate preserving order and remove falsy entries
@@ -200,22 +227,63 @@ def handle_message(user_message: str, credentials, project_id: str) -> str:
 
         if not function_calls:
             text = (response.text or "").strip()
-            return text or "No response generated."
+            return {"reply": text or "No response generated.", "tool_results": tool_results}
 
         # Keep the model's own turn (including its function_call parts) in history.
         contents.append(candidate.content)
 
-        # Run every tool call in this turn concurrently -- they're independent
-        # blocking GCP API calls, so this collapses N sequential round trips
-        # into roughly one.
+        # If any tool requires confirmation, do not execute it yet.
+        confirm_calls = [fc for fc in function_calls if TOOL_REGISTRY.get(fc.name, {}).get("requires_confirmation")]
+        confirm_names = {fc.name for fc in confirm_calls}
+        normal_calls = [fc for fc in function_calls if fc.name not in confirm_names]
+
+        if confirm_calls:
+            pending = confirm_calls[0]
+            pending_args = dict(pending.args or {})
+            if normal_calls:
+                executed = []
+                futures = [
+                    _TOOL_EXECUTOR.submit(_dispatch, fc.name, dict(fc.args or {}), credentials, project_id)
+                    for fc in normal_calls
+                ]
+                for fc, future in zip(normal_calls, futures):
+                    result = future.result()
+                    executed.append((fc, result))
+                result_parts = [
+                    types.Part.from_function_response(name=fc.name, response={"result": result})
+                    for fc, result in executed
+                ]
+                contents.append(types.Content(role="user", parts=result_parts))
+                for fc, result in executed:
+                    if fc.name == "get_cpu_utilization":
+                        tool_results.append({"tool": fc.name, "result": result, "resource_type": dict(fc.args or {}).get("resource_type")})
+
+            instance_name = pending_args.get("instance_name", "unknown instance")
+            zone = pending_args.get("zone") or "(auto-detect)"
+            prompt = (
+                f"Confirm restart of VM {instance_name} in zone {zone}? Reply Yes to proceed or Cancel to abort."
+            )
+            return {"reply": prompt, "pending_action": {"tool": pending.name, "args": pending_args}}
+
+        executed = []
         futures = [
             _TOOL_EXECUTOR.submit(_dispatch, fc.name, dict(fc.args or {}), credentials, project_id)
             for fc in function_calls
         ]
+        for fc, future in zip(function_calls, futures):
+            result = future.result()
+            executed.append((fc, result))
         result_parts = [
-            types.Part.from_function_response(name=fc.name, response={"result": future.result()})
-            for fc, future in zip(function_calls, futures)
+            types.Part.from_function_response(name=fc.name, response={"result": result})
+            for fc, result in executed
         ]
         contents.append(types.Content(role="user", parts=result_parts))
+        for fc, result in executed:
+            if fc.name == "get_cpu_utilization":
+                tool_results.append({"tool": fc.name, "result": result, "resource_type": dict(fc.args or {}).get("resource_type")})
+        text = (response.text or "").strip()
+        if not text and tool_results:
+            text = "CPU utilization data retrieved."
+        return {"reply": text or "Tool call completed.", "tool_results": tool_results}
 
-    return "The agent took too many steps to complete this request -- please try a more specific prompt."
+    return {"reply": "The agent took too many steps to complete this request -- please try a more specific prompt.", "tool_results": tool_results}

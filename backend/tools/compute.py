@@ -52,6 +52,7 @@ def find_instance_zone(credentials, project_id: str, instance_name: str) -> str 
         },
         "required": ["instance_name"],
     },
+    requires_confirmation=True,
 )
 def restart_instance(credentials, project_id: str, instance_name: str, zone: str | None = None) -> dict:
     """Soft-restart (reset) a VM. Auto-discovers the zone if not supplied."""

@@ -22,6 +22,8 @@ function App() {
   const [message, setMessage] = useState('');
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [error, setError] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [toolResults, setToolResults] = useState([]);
 
   const signedIn = status.signed_in;
 
@@ -63,6 +65,7 @@ function App() {
       { kind: 'user', text: trimmed },
       { kind: 'agent pending', text: 'Thinking…' },
     ]);
+    setToolResults([]);
 
     try {
       const data = await api('/api/chat', {
@@ -77,6 +80,8 @@ function App() {
             : item
         )
       );
+      setPendingAction(data.pending_action || null);
+      setToolResults(data.tool_results || []);
     } catch (err) {
       setChatLog((log) =>
         log.map((item) =>
@@ -103,6 +108,41 @@ function App() {
     () => projects.map((p) => ({ value: p.project_id, label: `${p.name} (${p.project_id})` })),
     [projects]
   );
+
+  const confirmPendingAction = async (confirm) => {
+    if (!pendingAction) return;
+
+    setChatLog((log) => [
+      ...log,
+      { kind: 'user', text: confirm ? 'Yes' : 'Cancel' },
+      { kind: 'agent pending', text: 'Thinking…' },
+    ]);
+
+    try {
+      const data = await api('/api/confirm-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pending_action: pendingAction, confirm }),
+      });
+      setChatLog((log) =>
+        log.map((item) =>
+          item.kind === 'agent pending' && item.text === 'Thinking…'
+            ? { kind: 'agent', text: data.reply }
+            : item
+        )
+      );
+    } catch (err) {
+      setChatLog((log) =>
+        log.map((item) =>
+          item.kind === 'agent pending' && item.text === 'Thinking…'
+            ? { kind: 'agent error', text: `Error: ${err.message}` }
+            : item
+        )
+      );
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   return (
     <div id="app">
@@ -173,7 +213,49 @@ function App() {
             ))}
           </section>
 
+          {(() => {
+            const cpuItems = toolResults
+              .filter((r) => r.tool === 'get_cpu_utilization' && Array.isArray(r.result))
+              .flatMap((r) => r.result || [])
+              .filter((item) => item && typeof item.utilization_percent === 'number');
+
+            if (cpuItems.length === 0) {
+              return null;
+            }
+
+            return (
+              <section className="chart-panel">
+                <h3>CPU Utilization</h3>
+                <div className="chart-grid">
+                  {cpuItems.map((item) => (
+                    <div key={item.resource || Math.random()} className="bar-row">
+                      <div className="bar-label">{item.resource || 'unknown resource'}</div>
+                      <div className="bar-wrap">
+                        <div className="bar" style={{ width: `${Math.min(item.utilization_percent, 100)}%` }} />
+                      </div>
+                      <div className="bar-value">{item.utilization_percent}%</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })()}
+
           {error && <div className="error-bar">{error}</div>}
+
+          {pendingAction && (
+            <div className="confirm-bar">
+              <span>Confirm restart for <strong>{pendingAction.args.instance_name}</strong>?</span>
+              <div className="confirm-actions">
+                <button type="button" className="btn ghost" onClick={() => confirmPendingAction(false)}>
+                  Cancel
+                </button>
+                <button type="button" className="btn primary" onClick={() => confirmPendingAction(true)}>
+                  Yes, restart
+                </button>
+              </div>
+            </div>
+          )}
 
           <form className="chat-form" onSubmit={sendMessage}>
             <input

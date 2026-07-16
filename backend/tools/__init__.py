@@ -11,7 +11,7 @@ from typing import Any, Callable
 TOOL_REGISTRY: dict[str, dict[str, Any]] = {}
 
 
-def tool(name: str, description: str, parameters: dict):
+def tool(name: str, description: str, parameters: dict, requires_confirmation: bool = False):
     def decorator(func: Callable):
         if name in TOOL_REGISTRY:
             raise ValueError(f"Duplicate tool registration: {name}")
@@ -19,6 +19,7 @@ def tool(name: str, description: str, parameters: dict):
             "func": func,
             "description": description,
             "parameters": parameters,
+            "requires_confirmation": requires_confirmation,
             "module": func.__module__,
         }
         return func

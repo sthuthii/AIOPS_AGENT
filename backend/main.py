@@ -79,6 +79,11 @@ class ChatBody(BaseModel):
     message: str
 
 
+class ConfirmActionBody(BaseModel):
+    pending_action: dict
+    confirm: bool = True
+
+
 @app.post("/api/chat")
 def chat(body: ChatBody, request: Request):
     session = _require_session(request)
@@ -86,10 +91,33 @@ def chat(body: ChatBody, request: Request):
     project_id = session.get("project_id")
 
     try:
-        reply = agent.handle_message(body.message, credentials, project_id)
+        result = agent.handle_message(body.message, credentials, project_id)
     except Exception as e:
         logger.exception("Agent error while handling chat message")
         raise HTTPException(status_code=500, detail=f"Agent error: {e}")
+
+    if isinstance(result, dict) and "reply" in result:
+        return result
+    return {"reply": result}
+
+
+@app.post("/api/confirm-action")
+def confirm_action(body: ConfirmActionBody, request: Request):
+    session = _require_session(request)
+    credentials = get_credentials_from_session(session)
+    project_id = session.get("project_id")
+
+    if not body.pending_action:
+        raise HTTPException(status_code=400, detail="No pending action provided.")
+
+    if not body.confirm:
+        return {"reply": "Action cancelled."}
+
+    try:
+        reply = agent.execute_pending_action(body.pending_action, credentials, project_id)
+    except Exception as e:
+        logger.exception("Error executing pending action")
+        raise HTTPException(status_code=500, detail=f"Action execution failed: {e}")
 
     return {"reply": reply}
 

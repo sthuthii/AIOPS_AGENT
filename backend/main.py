@@ -6,13 +6,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-try:
+if __package__:
     from .config import settings
     from .session_store import get_session, update_session
     from .auth import router as auth_router, get_credentials_from_session
     from .tools.projects import list_projects
     from . import agent
-except Exception:
+else:
     from config import settings
     from session_store import get_session, update_session
     from auth import router as auth_router, get_credentials_from_session

@@ -1,6 +1,6 @@
-try:
+if __package__:
     from .tool_loader import load_tools
-except Exception:
+else:
     from tool_loader import load_tools
 
 

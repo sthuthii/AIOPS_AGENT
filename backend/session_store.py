@@ -18,9 +18,9 @@ from typing import Optional, Dict, Any
 
 from itsdangerous import URLSafeSerializer, BadSignature
 
-try:
+if __package__:
     from .config import settings
-except Exception:
+else:
     from config import settings
 
 _serializer = URLSafeSerializer(settings.SESSION_SECRET, salt="aiops-session")

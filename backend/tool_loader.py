@@ -1,11 +1,11 @@
 import importlib
 import pkgutil
 
-try:
+if __package__:
     from .tools import TOOL_REGISTRY
 
     TOOLS_PACKAGE_NAME = "backend.tools"
-except Exception:
+else:
     from tools import TOOL_REGISTRY
 
     TOOLS_PACKAGE_NAME = "tools"

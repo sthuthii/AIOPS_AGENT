@@ -14,11 +14,11 @@ import time
 import random
 import re
 
-try:
+if __package__:
     from .config import settings
     from .tool_loader import load_tools
     from .tool_specs import load_tool_specs
-except Exception:
+else:
     from config import settings
     from tool_loader import load_tools
     from tool_specs import load_tool_specs

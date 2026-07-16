@@ -11,10 +11,10 @@ from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 
-try:
+if __package__:
     from .config import settings
     from .session_store import create_session, get_session, update_session, delete_session
-except Exception:
+else:
     from config import settings
     from session_store import create_session, get_session, update_session, delete_session
 

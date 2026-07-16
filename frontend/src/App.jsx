@@ -24,6 +24,7 @@ function App() {
   const [error, setError] = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
   const [toolResults, setToolResults] = useState([]);
+  const [incidentSummary, setIncidentSummary] = useState(null);
 
   const signedIn = status.signed_in;
 
@@ -66,6 +67,7 @@ function App() {
       { kind: 'agent pending', text: 'Thinking…' },
     ]);
     setToolResults([]);
+    setIncidentSummary(null);
 
     try {
       const data = await api('/api/chat', {
@@ -82,6 +84,7 @@ function App() {
       );
       setPendingAction(data.pending_action || null);
       setToolResults(data.tool_results || []);
+      setIncidentSummary(data.incident_summary || null);
     } catch (err) {
       setChatLog((log) =>
         log.map((item) =>
@@ -212,6 +215,45 @@ function App() {
               <Bubble key={index} kind={entry.kind} text={entry.text} />
             ))}
           </section>
+
+          {incidentSummary && (
+            <section className="incident-summary-card">
+              <div className="incident-summary-header">
+                <h3>Incident Summary</h3>
+                <span>{incidentSummary.project_id}</span>
+              </div>
+              <div className="incident-summary-body">
+                <div>
+                  <h4>Resources</h4>
+                  <ul>
+                    {incidentSummary.resources?.length ? incidentSummary.resources.map((resource, index) => (
+                      <li key={`${resource.name}-${index}`}>
+                        <strong>{resource.name}</strong> — {resource.type} · {resource.status}
+                      </li>
+                    )) : <li>No resource data returned.</li>}
+                  </ul>
+                </div>
+                <div>
+                  <h4>Alerts</h4>
+                  <ul>
+                    {incidentSummary.alerts?.length ? incidentSummary.alerts.map((alert, index) => (
+                      <li key={`${alert.message}-${index}`}>
+                        <strong>[{alert.severity}]</strong> {alert.message}
+                      </li>
+                    )) : <li>No recent alerts detected.</li>}
+                  </ul>
+                </div>
+                <div>
+                  <h4>Recommended next steps</h4>
+                  <ul>
+                    {incidentSummary.recommendations?.length ? incidentSummary.recommendations.map((recommendation, index) => (
+                      <li key={`${recommendation}-${index}`}>{recommendation}</li>
+                    )) : <li>Continue monitoring the environment.</li>}
+                  </ul>
+                </div>
+              </div>
+            </section>
+          )}
 
           {(() => {
             const cpuItems = toolResults

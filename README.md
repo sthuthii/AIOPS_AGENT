@@ -83,6 +83,7 @@ The React frontend provides:
 - a chat log for user and agent messages
 - a confirmation bar for destructive actions
 - a CPU utilization visualization panel for returned monitoring data
+- a dedicated incident-summary card that surfaces a structured snapshot of resources, alerts, and recommended next steps when the user asks for an incident summary
 
 ### 4. Confirmation before mutations
 
@@ -99,6 +100,17 @@ This is a safety measure designed to prevent accidental infrastructure changes.
 ### 5. Multi-tool execution and resilience
 
 The agent can invoke multiple independent tools in one turn (for example computing summary data from Compute, GKE, SQL, and alerts). It executes those calls concurrently to reduce latency. It also has model-fallback logic for transient Gemini API errors, quota issues, and model availability problems.
+
+### 6. Incident summary mode
+
+A new incident-summary experience is available for users who want a more operational view of the current environment. If the prompt contains phrases such as “incident summary”, “summarize the incident”, or “service health”, the backend gathers data from Compute Engine, GKE, Cloud SQL, and recent alerts, then returns a structured summary with:
+
+- a project-level heading
+- a list of the most relevant resources and their states
+- recent alert findings
+- recommended next steps
+
+This makes the app feel more like an AIOps copilot than a simple Q&A interface.
 
 ---
 
@@ -331,6 +343,8 @@ You can try prompts such as:
 - "Show CPU utilization for production VMs"
 - "List unhealthy Kubernetes clusters"
 - "Summarize infrastructure alerts from the last 24 hours"
+- "Give me an incident summary"
+- "Summarize the current incident"
 - "Restart the VM named app-server-01"
 - "List Cloud SQL instances with high CPU usage"
 

@@ -143,6 +143,44 @@ body {
   display: flex;
   gap: 10px;
 }
+.incident-summary-card {
+  margin: 0 0 16px;
+  padding: 16px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #111827, #172033);
+  border: 1px solid var(--border);
+}
+.incident-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+.incident-summary-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.incident-summary-header span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.incident-summary-body {
+  display: grid;
+  gap: 12px;
+}
+.incident-summary-body h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.incident-summary-body ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+.incident-summary-body li {
+  margin-bottom: 6px;
+}
 .chart-panel {
   margin: 16px 0;
   padding: 16px;

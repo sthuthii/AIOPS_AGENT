@@ -136,6 +136,190 @@ def _format_action_result(result: object) -> str:
     return str(result)
 
 
+def _summarize_tool_results(tool_results: list[dict]) -> str:
+    if not tool_results:
+        return "Tool call completed."
+
+    summaries = []
+    for entry in tool_results:
+        tool_name = entry.get("tool")
+        result = entry.get("result")
+        if not isinstance(result, list):
+            continue
+
+        if tool_name == "list_compute_instances":
+            items = [item for item in result if isinstance(item, dict)]
+            errors = [item.get("error") for item in items if item.get("error")]
+            if errors:
+                summaries.append(f"Compute Engine lookup issue: {errors[0]}")
+                continue
+            if not items:
+                summaries.append("No Compute Engine instances were returned.")
+                continue
+            lines = ["Compute Engine instances:"]
+            for item in items[:10]:
+                lines.append(
+                    f"- {item.get('name', 'unknown')} ({item.get('status', 'unknown')}, {item.get('zone', 'unknown')})"
+                )
+            if len(items) > 10:
+                lines.append(f"- ... and {len(items) - 10} more")
+            summaries.append("\n".join(lines))
+        elif tool_name == "list_gke_clusters":
+            items = [item for item in result if isinstance(item, dict)]
+            if not items:
+                summaries.append("No GKE clusters were returned.")
+                continue
+            lines = ["GKE clusters:"]
+            for item in items[:10]:
+                lines.append(f"- {item.get('name', 'unknown')} ({item.get('status', 'unknown')}, {item.get('location', 'unknown')})")
+            summaries.append("\n".join(lines))
+        elif tool_name == "list_cloud_sql_instances":
+            items = [item for item in result if isinstance(item, dict)]
+            if not items:
+                summaries.append("No Cloud SQL instances were returned.")
+                continue
+            lines = ["Cloud SQL instances:"]
+            for item in items[:10]:
+                lines.append(f"- {item.get('name', 'unknown')} ({item.get('state', 'unknown')}, {item.get('tier', 'unknown')})")
+            summaries.append("\n".join(lines))
+        elif tool_name == "summarize_alerts":
+            items = [item for item in result if isinstance(item, dict)]
+            if not items:
+                summaries.append("No recent alerts were returned.")
+                continue
+            lines = ["Recent alerts:"]
+            for item in items[:8]:
+                severity = item.get("severity", "INFO")
+                message = item.get("message", "No message")
+                lines.append(f"- [{severity}] {message}")
+            summaries.append("\n".join(lines))
+        elif tool_name == "get_cpu_utilization":
+            items = [item for item in result if isinstance(item, dict)]
+            if not items:
+                summaries.append("No CPU utilization data was returned.")
+                continue
+            lines = ["CPU utilization:"]
+            for item in items[:8]:
+                resource = item.get("resource", "unknown")
+                util = item.get("utilization_percent")
+                lines.append(f"- {resource}: {util}%")
+            summaries.append("\n".join(lines))
+
+    return "\n\n".join(summaries) if summaries else "Tool call completed."
+
+
+def _looks_like_incident_summary_request(message: str) -> bool:
+    lowered = message.lower()
+    return any(
+        phrase in lowered
+        for phrase in [
+            "incident summary",
+            "summarize incident",
+            "current incident",
+            "incident report",
+            "health summary",
+            "service health",
+            "what is happening",
+        ]
+    )
+
+
+def build_incident_summary(project_id: str, resources: list[dict] | None = None, alerts: list[dict] | None = None,
+                           recommendations: list[str] | None = None) -> dict:
+    resources = resources or []
+    alerts = alerts or []
+    recommendations = recommendations or []
+
+    summary_lines = [
+        "Incident Summary",
+        f"Project: {project_id}",
+        "",
+        "Resources:",
+    ]
+    if resources:
+        for resource in resources[:8]:
+            name = resource.get("name", "unknown")
+            kind = resource.get("type", "resource")
+            status = resource.get("status", "unknown")
+            summary_lines.append(f"- {kind}: {name} ({status})")
+    else:
+        summary_lines.append("- No resource data returned.")
+
+    summary_lines.extend(["", "Alerts:"])
+    if alerts:
+        for alert in alerts[:6]:
+            severity = alert.get("severity", "INFO")
+            message = alert.get("message", "No message")
+            summary_lines.append(f"- [{severity}] {message}")
+    else:
+        summary_lines.append("- No recent alerts detected.")
+
+    summary_lines.extend(["", "Recommended next steps:"])
+    if recommendations:
+        for item in recommendations[:4]:
+            summary_lines.append(f"- {item}")
+    else:
+        summary_lines.append("- Continue monitoring and validate recent changes.")
+
+    return {
+        "reply": "\n".join(summary_lines),
+        "incident_summary": {
+            "project_id": project_id,
+            "resources": resources,
+            "alerts": alerts,
+            "recommendations": recommendations,
+        },
+    }
+
+
+def _collect_incident_context(credentials, project_id: str) -> dict:
+    futures = [
+        _TOOL_EXECUTOR.submit(_dispatch, "list_compute_instances", {}, credentials, project_id),
+        _TOOL_EXECUTOR.submit(_dispatch, "list_gke_clusters", {}, credentials, project_id),
+        _TOOL_EXECUTOR.submit(_dispatch, "list_cloud_sql_instances", {}, credentials, project_id),
+        _TOOL_EXECUTOR.submit(_dispatch, "summarize_alerts", {"hours": 24}, credentials, project_id),
+    ]
+
+    compute_results, gke_results, sql_results, alerts_results = [future.result() for future in futures]
+
+    resources = []
+    if isinstance(compute_results, list):
+        for item in compute_results:
+            if isinstance(item, dict) and "error" not in item:
+                resources.append({"name": item.get("name"), "type": "Compute Engine VM", "status": item.get("status")})
+    if isinstance(gke_results, list):
+        for item in gke_results:
+            if isinstance(item, dict) and "error" not in item:
+                resources.append({"name": item.get("name"), "type": "GKE Cluster", "status": item.get("status")})
+    if isinstance(sql_results, list):
+        for item in sql_results:
+            if isinstance(item, dict) and "error" not in item:
+                resources.append({"name": item.get("name"), "type": "Cloud SQL Instance", "status": item.get("state")})
+
+    alerts = []
+    if isinstance(alerts_results, list):
+        for item in alerts_results:
+            if isinstance(item, dict) and "error" not in item:
+                alerts.append({
+                    "severity": item.get("severity", "INFO"),
+                    "message": item.get("message", "No message"),
+                })
+
+    recommendations = []
+    if alerts:
+        recommendations.append("Review the latest alert messages and correlate them with the affected resources.")
+    if any(resource.get("status") not in {"RUNNING", "RUNNABLE", "OK", "SUCCESS"} for resource in resources):
+        recommendations.append("Inspect unhealthy or degraded resources first.")
+    if not recommendations:
+        recommendations.append("Continue monitoring the environment and validate recent changes.")
+
+    return {
+        "resources": resources,
+        "alerts": alerts,
+        "recommendations": recommendations,
+    }
+
+
 def execute_pending_action(pending_action: dict, credentials, project_id: str) -> str:
     tool_name = pending_action.get("tool")
     args = pending_action.get("args", {})
@@ -148,6 +332,15 @@ def execute_pending_action(pending_action: dict, credentials, project_id: str) -
 def handle_message(user_message: str, credentials, project_id: str) -> dict:
     if not project_id:
         return {"reply": "No GCP project selected yet -- please pick a project first."}
+
+    if _looks_like_incident_summary_request(user_message):
+        context = _collect_incident_context(credentials, project_id)
+        return build_incident_summary(
+            project_id=project_id,
+            resources=context.get("resources", []),
+            alerts=context.get("alerts", []),
+            recommendations=context.get("recommendations", []),
+        )
 
     contents = [
         types.Content(
@@ -279,11 +472,10 @@ def handle_message(user_message: str, credentials, project_id: str) -> dict:
         ]
         contents.append(types.Content(role="user", parts=result_parts))
         for fc, result in executed:
-            if fc.name == "get_cpu_utilization":
-                tool_results.append({"tool": fc.name, "result": result, "resource_type": dict(fc.args or {}).get("resource_type")})
+            tool_results.append({"tool": fc.name, "result": result, "resource_type": dict(fc.args or {}).get("resource_type")})
         text = (response.text or "").strip()
         if not text and tool_results:
-            text = "CPU utilization data retrieved."
+            text = _summarize_tool_results(tool_results)
         return {"reply": text or "Tool call completed.", "tool_results": tool_results}
 
     return {"reply": "The agent took too many steps to complete this request -- please try a more specific prompt.", "tool_results": tool_results}
